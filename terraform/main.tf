@@ -1,14 +1,8 @@
-# terraform/provider.tf
-
-provider "aws" {
-  region = "us-east-1"  # Specify your AWS region
-}
-
 # Backend configuration (optional, if using remote state like S3)
 terraform {
   backend "s3" {
-    bucket = "my-terraform-state-bucket"
-    key    = "path/to/my/terraform.tfstate"
-    region = "us-east-1"
+    bucket = "uj-jenkins-terraform-backup"
+    key    = "env:/terraform.tfstate"  # Adjust the path as needed
+    region = "ap-south-1"  # Ensure this matches the region of your bucket
   }
 }
