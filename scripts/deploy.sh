@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd terraform 
+
 # Initialize Terraform
 terraform init
 
