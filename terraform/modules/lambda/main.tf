@@ -1,82 +1,54 @@
-# terraform/modules/lambda/main.tf
-
-resource "aws_lambda_function" "start_jenkins" {
-  function_name = "StartJenkins"
-  role          = var.lambda_role
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.8"
-  timeout       = 30
-  filename      = "terraform/modules/lambda/start-jenkins/lambda_function.zip"
+resource "aws_apigatewayv2_api" "jenkins_trigger" {
+  name          = "JenkinsTriggerAPI"
+  protocol_type = "HTTP"
 }
 
-resource "aws_lambda_function" "stop_jenkins" {
-  function_name = "StopJenkins"
-  role          = var.lambda_role
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.8"
-  timeout       = 30
-  filename      = "terraform/modules/lambda/stop-jenkins/lambda_function.zip"
+resource "aws_apigatewayv2_integration" "start_lambda_integration" {
+  api_id           = aws_apigatewayv2_api.jenkins_trigger.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.start_jenkins.invoke_arn
+  integration_method = "POST"
+  payload_format_version = "2.0"
 }
 
-resource "aws_api_gateway_rest_api" "api" {
-  name        = "jenkins-api"
-  description = "API to start/stop Jenkins Lambda"
+resource "aws_apigatewayv2_route" "start_route" {
+  api_id    = aws_apigatewayv2_api.jenkins_trigger.id
+  route_key = "POST /start"
+  target    = "integrations/${aws_apigatewayv2_integration.start_lambda_integration.id}"
 }
 
-resource "aws_api_gateway_resource" "root_start" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "start"
-}
-
-resource "aws_api_gateway_resource" "root_stop" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "stop"
-}
-
-resource "aws_api_gateway_method" "start_method" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.root_start.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_method" "stop_method" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.root_stop.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "start_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.api.id
-  resource_id             = aws_api_gateway_resource.root_start.id
-  http_method             = aws_api_gateway_method.start_method.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = "arn:aws:apigateway:${data.aws_region.current.name}:lambda:path/2015-03-31/functions/${aws_lambda_function.start_jenkins.arn}/invocations"
-}
-
-resource "aws_api_gateway_integration" "stop_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.api.id
-  resource_id             = aws_api_gateway_resource.root_stop.id
-  http_method             = aws_api_gateway_method.stop_method.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = "arn:aws:apigateway:${data.aws_region.current.name}:lambda:path/2015-03-31/functions/${aws_lambda_function.stop_jenkins.arn}/invocations"
-}
-
-resource "aws_lambda_permission" "allow_api_gateway_start" {
+resource "aws_lambda_permission" "apigw_start" {
   statement_id  = "AllowAPIGatewayInvokeStart"
   action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.start_jenkins.arn
   principal     = "apigateway.amazonaws.com"
-  function_name = aws_lambda_function.start_jenkins.function_name
+  source_arn    = "${aws_apigatewayv2_api.jenkins_trigger.execution_arn}/*/*"
 }
 
-resource "aws_lambda_permission" "allow_api_gateway_stop" {
+resource "aws_apigatewayv2_integration" "stop_lambda_integration" {
+  api_id           = aws_apigatewayv2_api.jenkins_trigger.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.stop_jenkins.invoke_arn
+  integration_method = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "stop_route" {
+  api_id    = aws_apigatewayv2_api.jenkins_trigger.id
+  route_key = "POST /stop"
+  target    = "integrations/${aws_apigatewayv2_integration.stop_lambda_integration.id}"
+}
+
+resource "aws_lambda_permission" "apigw_stop" {
   statement_id  = "AllowAPIGatewayInvokeStop"
   action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.stop_jenkins.arn
   principal     = "apigateway.amazonaws.com"
-  function_name = aws_lambda_function.stop_jenkins.function_name
+  source_arn    = "${aws_apigatewayv2_api.jenkins_trigger.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_stage" "api_stage" {
+  api_id      = aws_apigatewayv2_api.jenkins_trigger.id
+  name        = "$default"
+  auto_deploy = true
 }

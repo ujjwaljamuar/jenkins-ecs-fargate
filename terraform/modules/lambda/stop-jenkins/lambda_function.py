@@ -1,29 +1,38 @@
-# terraform/modules/lambda/stop-jenkins/lambda_function.py
-
 import json
+import os
 import boto3
 
+ecs = boto3.client('ecs')
+
 def lambda_handler(event, context):
-    client = boto3.client('ecs')
+    try:
+        cluster_name = os.environ['CLUSTER_NAME']
+        tasks = ecs.list_tasks(cluster=cluster_name)
 
-    response = client.list_tasks(
-        cluster='jenkins-cluster',  # Replace with your ECS cluster name
-        family='jenkins-task',  # Replace with your ECS task family name
-        desiredStatus='RUNNING'
-    )
+        if not tasks['taskArns']:
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'message': 'No running Jenkins tasks found'})
+            }
 
-    if len(response['taskArns']) > 0:
-        task_arn = response['taskArns'][0]  # Stop the first running task
-        stop_response = client.stop_task(
-            cluster='jenkins-cluster',  # Replace with your ECS cluster name
-            task=task_arn
-        )
+        for task_arn in tasks['taskArns']:
+            ecs.stop_task(
+                cluster=cluster_name,
+                task=task_arn,
+                reason='Automated stop after idle timeout'
+            )
+
         return {
             'statusCode': 200,
-            'body': json.dumps('Jenkins task stopped successfully!')
+            'body': json.dumps({
+                'message': 'Stopped Jenkins tasks',
+                'tasks': tasks['taskArns']
+            })
         }
-    else:
+
+    except Exception as e:
+        print("Error stopping Jenkins task:", str(e))
         return {
-            'statusCode': 400,
-            'body': json.dumps('No running Jenkins task found.')
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
         }

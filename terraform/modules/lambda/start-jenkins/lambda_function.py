@@ -1,25 +1,41 @@
-# terraform/modules/lambda/start-jenkins/lambda_function.py
-
 import json
+import os
 import boto3
 
-def lambda_handler(event, context):
-    client = boto3.client('ecs')
+ecs = boto3.client('ecs')
 
-    response = client.run_task(
-        cluster='jenkins-cluster',  # Replace with your ECS cluster name
-        taskDefinition='jenkins-task',  # Replace with your task definition
-        count=1,
-        launchType='FARGATE',
-        networkConfiguration={
-            'awsvpcConfiguration': {
-                'subnets': ['subnet-xxxxxx'],  # Replace with your subnet IDs
-                'assignPublicIp': 'ENABLED'
+def lambda_handler(event, context):
+    try:
+        cluster_name = os.environ['CLUSTER_NAME']
+        task_def = os.environ['TASK_DEFINITION']
+        subnets = os.environ['SUBNET_IDS'].split(',')
+        security_groups = [os.environ['SECURITY_GROUP_IDS']]
+
+        response = ecs.run_task(
+            cluster=cluster_name,
+            launchType='FARGATE',
+            taskDefinition=task_def,
+            count=1,
+            networkConfiguration={
+                'awsvpcConfiguration': {
+                    'subnets': subnets,
+                    'securityGroups': security_groups,
+                    'assignPublicIp': 'ENABLED'
+                }
             }
+        )
+
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Jenkins task started',
+                'taskArn': response['tasks'][0]['taskArn'] if response.get('tasks') else 'No task started'
+            })
         }
-    )
-    
-    return {
-        'statusCode': 200,
-        'body': json.dumps('Jenkins task started successfully!')
-    }
+
+    except Exception as e:
+        print("Error starting Jenkins task:", str(e))
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
