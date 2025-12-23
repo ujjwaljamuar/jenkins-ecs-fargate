@@ -8,6 +8,6 @@ resource "aws_s3_bucket_versioning" "versioning" {
   bucket = aws_s3_bucket.jenkins_home.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Suspended"
   }
 }
