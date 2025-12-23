@@ -1,2 +1,4 @@
 *.terraform*
 tfplan
+notes.txt
+env-var.sh
